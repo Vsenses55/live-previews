@@ -1,0 +1,282 @@
+/*!
+ * Live Preview popup — Orlando Antonio / visualsenses.design
+ * Opens a live site (prototype, 3D viewer, microsite) in a full-screen sheet,
+ * with optional project notes below the canvas.
+ *
+ * Fully separate from the design-system popup (ds-engine.js):
+ *   own global (window.LivePopup), own element (#lv-popup), own CSS prefix (lv-),
+ *   own links (#live-<id>, data-live-open). It never reacts to #ds- links.
+ *
+ * Open from any link:        href="#live-<id>"          e.g. #live-pxl
+ * Open from any element:     data-live-open="<id>"
+ * Deep link from another page: /projects/pxl#live-pxl
+ * No project file needed:    data-live-src="https://…" data-live-title="Name"
+ */
+(function () {
+  'use strict';
+  if (window.LivePopup) return;
+
+  var script = document.currentScript || document.querySelector('script[src*="live-engine"]');
+  var BASE = script ? script.src.replace(/[^/]*$/, '') : '';
+  var VERSION = script && (script.src.split('?')[1] || '');
+
+  var ICON = {
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    out: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg>',
+    reload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>',
+    full: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>'
+
+  };
+
+  /* Same sheet, bar and close button as the design-system popup; everything prefixed lv-. */
+  var CSS = [
+    '#lv-popup,#lv-popup *{box-sizing:border-box}',
+    '#lv-popup h2,#lv-popup h3,#lv-popup p,#lv-popup dl,#lv-popup dd,#lv-popup dt{margin:0;letter-spacing:normal;text-transform:none}',
+    '#lv-popup button{text-transform:none;letter-spacing:normal;line-height:normal;margin:0;font:inherit;color:inherit}',
+    '#lv-popup a{text-decoration:none}',
+    '#lv-popup :focus-visible{outline:2px solid var(--lv-accent);outline-offset:2px}',
+    '#lv-popup{--scrim:rgb(0 0 0 / .55);--sheet:#f6f6f4;--ink:#1d1d1b;--muted:#66665f;--line:#e3e3df;--dock:#1d1d1b;--chip:#ebebe7;--ease:cubic-bezier(.2,.8,.2,1);',
+    '--lv-font:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;--lv-accent:#1d1d1b;--lv-on-accent:#fff;--lv-stage:#111;--lv-bar-h:65px;',
+    'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;justify-content:flex-end;visibility:hidden}',
+    '#lv-popup.is-open,#lv-popup.is-closing{visibility:visible}',
+    '#lv-popup .lv-scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;transition:opacity .45s var(--ease)}',
+    '#lv-popup .lv-sheet{position:relative;height:calc(100% - 24px - env(safe-area-inset-top,0px));background:var(--sheet);border-radius:16px 16px 0 0;transform:translateY(102%);transition:transform .6s var(--ease);display:flex;flex-direction:column;overflow:hidden;font-family:var(--lv-font);color:var(--ink)}',
+    '#lv-popup.is-open .lv-scrim{opacity:1}#lv-popup.is-open .lv-sheet{transform:none}',
+    '@media (prefers-reduced-motion:reduce){#lv-popup .lv-scrim,#lv-popup .lv-sheet{transition:none}}',
+    '#lv-popup .lv-bar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:var(--lv-bar-h);padding-block:10px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line)}',
+    '#lv-popup .lv-bar h2{font:700 17px/24px var(--lv-font);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '#lv-popup .lv-x{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;border:0;background:var(--dock);color:#fff;cursor:pointer;flex:none}',
+    '#lv-popup .lv-x:hover{background:#3a3a37}#lv-popup .lv-x svg{width:20px;height:20px}',
+    '#lv-popup .lv-scroll{position:relative;flex:1;overflow-y:auto;overscroll-behavior:contain}',
+    /* stage: fills the visible sheet; the toolbar sits above the canvas so the canvas never hides controls */
+    '#lv-popup .lv-stage{height:calc(100dvh - 24px - env(safe-area-inset-top,0px) - var(--lv-bar-h));min-height:420px;display:flex;flex-direction:column;gap:12px;padding:16px max(16px,env(safe-area-inset-right,0px)) 16px max(16px,env(safe-area-inset-left,0px))}',
+    '#lv-popup .lv-scroll.has-notes .lv-stage{height:calc(100dvh - 24px - env(safe-area-inset-top,0px) - var(--lv-bar-h) - 64px)}',
+    '#lv-popup .lv-tools{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:12px;min-width:0}',
+    '#lv-popup .lv-tgroup{display:flex;align-items:center;gap:8px;min-width:0}',
+    '#lv-popup .lv-ib{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;flex:none}',
+    '#lv-popup .lv-ib:hover{background:var(--chip)}#lv-popup .lv-ib svg{width:18px;height:18px}',
+    '#lv-popup .lv-ib[hidden]{display:none}',
+    '#lv-popup .lv-open{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--ink);background:transparent;color:var(--ink);font:700 14px/1 var(--lv-font);white-space:nowrap;transition:background .15s}',
+    '#lv-popup .lv-open:hover{background:var(--chip)}',
+    '#lv-popup .lv-open svg{width:16px;height:16px}',
+    '#lv-popup .lv-canvas{position:relative;flex:1;min-height:0;border-radius:14px;border:1px solid var(--line);background:var(--lv-stage);overflow:hidden;display:flex;justify-content:center}',
+    '#lv-popup .lv-frame{position:relative;width:100%;height:100%}',
+    '#lv-popup .lv-frame iframe{display:block;width:100%;height:100%;border:0;background:var(--lv-stage)}',
+    '#lv-popup .lv-load{position:absolute;inset:0;display:grid;place-items:center;background:var(--lv-stage);color:rgb(255 255 255 / .75);font:600 14px/20px var(--lv-font);transition:opacity .35s var(--ease);pointer-events:none}',
+    '#lv-popup .lv-load span{display:inline-flex;align-items:center;gap:10px}',
+    '#lv-popup .lv-load span::before{content:"";width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:lv-spin .8s linear infinite}',
+    '#lv-popup .lv-canvas.is-loaded .lv-load{opacity:0}',
+    '@keyframes lv-spin{to{transform:rotate(1turn)}}',
+    '@media (prefers-reduced-motion:reduce){#lv-popup .lv-load span::before{animation:none}}',
+    '#lv-popup .lv-stage:fullscreen{background:var(--lv-stage);padding:12px}',
+    '#lv-popup .lv-stage:fullscreen .lv-canvas{border-color:transparent}',
+    '#lv-popup .lv-stage:fullscreen .lv-ib,#lv-popup .lv-stage:fullscreen .lv-open{background:#fff}',
+    /* notes below the canvas */
+    '#lv-popup .lv-notes{border-top:1px solid var(--line);scroll-margin-top:0}',
+    '#lv-popup .lv-notes[hidden]{display:none}',
+    '#lv-popup .lv-inner{max-width:1180px;margin:0 auto;padding:56px max(24px,env(safe-area-inset-right,0px)) 96px max(24px,env(safe-area-inset-left,0px));display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:64px;align-items:start}',
+    '#lv-popup .lv-eyebrow{font:700 13px/20px var(--lv-font);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}',
+    '#lv-popup .lv-copy h3{font:700 32px/38px var(--lv-font);color:var(--ink);margin-bottom:16px}',
+    '#lv-popup .lv-copy p{font:500 17px/28px var(--lv-font);color:#3d3d39;max-width:66ch}',
+    '#lv-popup .lv-copy p + p{margin-top:16px}',
+    '#lv-popup .lv-copy h4{font:700 19px/26px var(--lv-font);color:var(--ink);margin:36px 0 10px}',
+    '#lv-popup .lv-copy ul{margin:0;padding-left:20px;font:500 17px/28px var(--lv-font);color:#3d3d39}',
+    '#lv-popup .lv-meta{border:1px solid var(--line);border-radius:14px;padding:8px 24px}',
+    '#lv-popup .lv-meta div{padding:16px 0}#lv-popup .lv-meta div + div{border-top:1px solid var(--line)}',
+    '#lv-popup .lv-meta dt{font:700 12px/18px var(--lv-font);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}',
+    '#lv-popup .lv-meta dd{font:600 15px/22px var(--lv-font);color:var(--ink)}',
+    '#lv-popup .lv-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}',
+    '#lv-popup .lv-tags span{padding:4px 10px;border-radius:999px;background:var(--chip);font:600 13px/18px var(--lv-font);color:var(--ink)}',
+    '#lv-popup .lv-error{padding:48px 24px;font:500 16px/26px var(--lv-font);color:var(--muted)}',
+    '@media (max-width:900px){#lv-popup .lv-inner{grid-template-columns:minmax(0,1fr);gap:32px;padding-top:40px}}',
+        '@media (max-width:560px){#lv-popup .lv-bar{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(10px,env(safe-area-inset-right,0px))}',
+    '#lv-popup .lv-stage{padding:12px max(12px,env(safe-area-inset-right,0px)) 12px max(12px,env(safe-area-inset-left,0px));min-height:360px}',
+    '#lv-popup .lv-open span{display:none}#lv-popup .lv-open{width:44px;padding:0;justify-content:center}',
+    '#lv-popup .lv-inner{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}',
+    '#lv-popup .lv-copy h3{font-size:26px;line-height:32px}}'
+  ].join('');
+
+  var registry = {}, pending = {}, root = null, current = null, lastFocus = null, closeT = 0;
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function q(s) { return root.querySelector(s); }
+
+  /* ---------- shell ---------- */
+  function ensureRoot() {
+    if (root) return root;
+    var st = document.createElement('style'); st.id = 'lv-popup-css'; st.textContent = CSS; document.head.appendChild(st);
+    root = document.createElement('div');
+    root.id = 'lv-popup'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-hidden', 'true'); root.setAttribute('aria-labelledby', 'lv-popup-title');
+    root.innerHTML =
+      '<div class="lv-scrim" data-lv-close></div>' +
+      '<div class="lv-sheet">' +
+        '<header class="lv-bar"><h2 id="lv-popup-title"></h2><button class="lv-x" type="button" data-lv-close aria-label="Close preview">' + ICON.x + '</button></header>' +
+        '<div class="lv-scroll">' +
+          '<section class="lv-stage" aria-label="Live preview">' +
+            '<div class="lv-tools">' +
+              '<div class="lv-tgroup">' +
+                '<button class="lv-ib" type="button" data-lv-reload aria-label="Reload preview" title="Reload">' + ICON.reload + '</button>' +
+                '<button class="lv-ib" type="button" data-lv-full aria-label="View full screen" title="Full screen">' + ICON.full + '</button>' +
+                '<a class="lv-open" target="_blank" rel="noopener"><span>Open site</span>' + ICON.out + '</a>' +
+              '</div>' +
+            '</div>' +
+            '<div class="lv-canvas"><div class="lv-frame"></div><div class="lv-load" aria-hidden="true"><span>Loading live preview</span></div></div>' +
+          '</section>' +
+          '<section class="lv-notes" hidden></section>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(root);
+
+    root.querySelectorAll('[data-lv-close]').forEach(function (b) { b.addEventListener('click', close); });
+    q('[data-lv-reload]').addEventListener('click', function () { var f = q('.lv-frame iframe'); if (f) mountFrame(f.getAttribute('src')); });
+    q('[data-lv-full]').addEventListener('click', toggleFull);
+    document.addEventListener('fullscreenchange', function () {
+      var on = document.fullscreenElement === q('.lv-stage');
+      q('[data-lv-full]').setAttribute('aria-label', on ? 'Exit full screen' : 'View full screen');
+    });
+    return root;
+  }
+
+  function mountFrame(src, title) {
+    var canvas = q('.lv-canvas'), frame = q('.lv-frame');
+    canvas.classList.remove('is-loaded');
+    frame.innerHTML = '';
+    var f = document.createElement('iframe');
+    f.title = title || q('#lv-popup-title').textContent || 'Live preview';
+    f.setAttribute('allow', 'fullscreen; autoplay; xr-spatial-tracking; accelerometer; gyroscope; clipboard-write');
+    f.setAttribute('allowfullscreen', '');
+    f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+    f.addEventListener('load', function () { canvas.classList.add('is-loaded'); });
+    f.src = src;
+    frame.appendChild(f);
+  }
+
+  function toggleFull() {
+    var stage = q('.lv-stage');
+    if (document.fullscreenElement) { document.exitFullscreen(); return; }
+    if (stage.requestFullscreen) stage.requestFullscreen().catch(function () {});
+    else { var f = q('.lv-frame iframe'); if (f) window.open(f.src, '_blank', 'noopener'); }
+  }
+
+  function notesHtml(C) {
+    var meta = (C.meta || []).filter(function (m) { return m && m[1]; });
+    if (!C.intro && !C.body && !meta.length && !(C.tags || []).length) return '';
+    var h = '<div class="lv-inner"><div class="lv-copy">';
+    if (C.eyebrow) h += '<div class="lv-eyebrow">' + esc(C.eyebrow) + '</div>';
+    h += '<h3>' + esc(C.heading || C.name) + '</h3>';
+    if (C.intro) h += (Array.isArray(C.intro) ? C.intro : [C.intro]).map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('');
+    if (C.body) h += C.body; /* trusted HTML from the project file */
+    h += '</div>';
+    if (meta.length || (C.tags || []).length) {
+      h += '<dl class="lv-meta">' + meta.map(function (m) { return '<div><dt>' + esc(m[0]) + '</dt><dd>' + esc(m[1]) + '</dd></div>'; }).join('');
+      if ((C.tags || []).length) h += '<div><dt>' + esc(C.tagsLabel || 'Built with') + '</dt><dd class="lv-tags">' + C.tags.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</dd></div>';
+      h += '</dl>';
+    }
+    return h + '</div>';
+  }
+
+  function load(id) {
+    if (registry[id]) return Promise.resolve(registry[id]);
+    if (pending[id]) return pending[id];
+    pending[id] = new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = BASE + 'projects/' + id + '.js' + (VERSION ? '?' + VERSION : '');
+      s.onload = function () { registry[id] ? res(registry[id]) : rej(new Error('projects/' + id + '.js did not register "' + id + '"')); };
+      s.onerror = function () { rej(new Error('Could not load projects/' + id + '.js')); };
+      document.head.appendChild(s);
+    });
+    pending[id].catch(function () { delete pending[id]; });
+    return pending[id];
+  }
+
+  /* ---------- open / close ---------- */
+  function show(C, key) {
+    root.setAttribute('style', [
+      C.font ? '--lv-font:' + C.font : '',
+      C.accent ? '--lv-accent:' + C.accent : '',
+      C.onAccent ? '--lv-on-accent:' + C.onAccent : '',
+      C.stage ? '--lv-stage:' + C.stage : ''
+    ].filter(Boolean).join(';'));
+    if (C.fontUrl && !document.querySelector('link[data-lv-font="' + key + '"]')) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = C.fontUrl; l.setAttribute('data-lv-font', key); document.head.appendChild(l); }
+    q('#lv-popup-title').textContent = C.name || 'Live preview';
+    q('.lv-x').setAttribute('aria-label', 'Close ' + (C.name || 'preview'));
+    var a = q('.lv-open'); a.href = C.url; a.querySelector('span').textContent = C.openLabel || 'Open site';
+    a.setAttribute('aria-label', (C.openLabel || 'Open site') + ' in a new tab'); a.title = C.openLabel || 'Open site';
+    var notes = q('.lv-notes'), html = notesHtml(C);
+    notes.innerHTML = html; notes.hidden = !html; q('.lv-scroll').classList.toggle('has-notes', !!html);
+    current = key;
+    q('.lv-scroll').scrollTop = 0;
+    mountFrame(C.url, C.name);
+  }
+
+  function open(id, inline) {
+    ensureRoot();
+    clearTimeout(closeT);
+    if (!root.classList.contains('is-open')) lastFocus = document.activeElement;
+    root.classList.remove('is-closing'); root.setAttribute('aria-hidden', 'false');
+    document.documentElement.style.overflow = 'hidden';
+    requestAnimationFrame(function () { root.classList.add('is-open'); q('.lv-x').focus({ preventScroll: true }); });
+    if (inline) { show(inline, 'inline:' + inline.url); return; }
+    q('#lv-popup-title').textContent = 'Loading…';
+    load(id).then(function (C) { show(C, id); }).catch(function (err) {
+      q('#lv-popup-title').textContent = 'Preview unavailable';
+      q('.lv-frame').innerHTML = '<p class="lv-error">This preview could not be loaded. Check your connection and try again.</p>';
+      q('.lv-canvas').classList.add('is-loaded');
+      current = null;
+      if (window.console) console.warn('[LivePopup]', err.message);
+    });
+  }
+
+  function close(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!root || !root.classList.contains('is-open')) return;
+    if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+    root.classList.remove('is-open'); root.classList.add('is-closing'); root.setAttribute('aria-hidden', 'true');
+    closeT = setTimeout(function () {
+      root.classList.remove('is-closing'); document.documentElement.style.overflow = '';
+      q('.lv-frame').innerHTML = ''; current = null; /* unload the site so 3D, audio and video stop */
+    }, 600);
+    if (history.replaceState && /#live-/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+    if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
+  }
+
+  function idFromHref(href) { var m = href && href.match(/#live-([a-z0-9_-]+)$/i); return m ? m[1].toLowerCase() : null; }
+
+  /* Capture phase, so Webflow interactions (Page Out, liquid transition) on the trigger do not fire. */
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest) return;
+    var t = e.target.closest('[data-live-open], [data-live-src], a[href*="#live-"]');
+    if (!t || (root && root.contains(t))) return;
+    if (t.hasAttribute('data-live-src')) {
+      e.preventDefault(); e.stopPropagation();
+      open(null, { url: t.getAttribute('data-live-src'), name: t.getAttribute('data-live-title') || 'Live preview' });
+      return;
+    }
+    var id = t.getAttribute('data-live-open') || idFromHref(t.getAttribute('href'));
+    if (!id) return;
+    var href = t.getAttribute('href') || '';
+    var samePage = !/^https?:|^\//.test(href) || href.split('#')[0] === '' || href.split('#')[0].replace(/\/$/, '') === location.pathname.replace(/\/$/, '');
+    if (t.hasAttribute('data-live-open') || samePage) { e.preventDefault(); e.stopPropagation(); open(id); }
+  }, true);
+
+  document.addEventListener('keydown', function (e) {
+    if (!root || !root.classList.contains('is-open')) return;
+    if (e.key === 'Escape' && !document.fullscreenElement) { close(e); return; }
+    if (e.key === 'Tab') {
+      var f = Array.prototype.filter.call(root.querySelectorAll('a[href], button:not([disabled]), iframe, [tabindex="0"]'), function (x) { return x.offsetParent !== null && x.tabIndex > -1; });
+      var a = f[0], z = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); }
+      else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); }
+    }
+  });
+
+  function fromHash() { var id = idFromHref(location.hash); if (id) open(id); }
+  window.addEventListener('hashchange', fromHash);
+
+  window.LivePopup = {
+    register: function (id, config) { registry[id] = config; },
+    open: function (idOrConfig) { typeof idOrConfig === 'object' ? open(null, idOrConfig) : open(idOrConfig); },
+    close: close
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fromHash); else fromHash();
+})();
