@@ -1,8 +1,6 @@
 /* Star Trek — Shuttlecraft Asteroid Sector. Opened by #live-startrek.
-   The page is a fixed 1920x1080 stage that scales itself to the window and keeps a 16–48px
-   black margin. `fixed` tells the popup that stage size and margin rule, so it can crop the
-   margin and show the stage edge to edge at any size.
-   If the page's margin rule in fit() ever changes, update `pad` to match.
+   The page fills the whole window with the 3D scene and scales its 1920x1080 HUD to fit,
+   so it simply fills the canvas (no `fixed` needed).
    Copy below is a DRAFT: edit intro/meta to match the case study. */
 LivePopup.register('startrek', {
   name: 'Star Trek Game Interface',
@@ -10,11 +8,6 @@ LivePopup.register('startrek', {
   openLabel: 'Open game',
 
   stage: '#000000',
-  fixed: {
-    width: 1920,
-    height: 1080,
-    pad: function (w) { return Math.round(Math.min(48, Math.max(16, w * 0.025))); }
-  },
 
   eyebrow: 'Game interface',
   heading: 'Flying the shuttlecraft through an asteroid sector',
