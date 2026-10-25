@@ -6,7 +6,8 @@ It is separate from the design-system popup (`design-systems/ds-engine.js`). It 
 
 ```
 live-engine.js     the popup: sheet, canvas, reload / full screen / open buttons, notes
-projects/pxl.js    PXL Agency 3D logo viewer
+projects/pxl.js        PXL Agency 3D logo viewer
+projects/startrek.js   Star Trek asteroid game (fixed 1920×1080 stage)
 index.html         test page listing every project
 ```
 
@@ -45,3 +46,13 @@ Only sites that allow being framed. GitHub Pages sites do. Webflow pages (includ
 ## Updating
 
 Edit the file and push. GitHub Pages can cache files for up to 10 minutes; to force an update, change the script tag to `live-engine.js?v=2` (the version is passed on to every project file).
+
+## Fixed-size pages
+
+Some pages are built at one size (for example a 1920×1080 stage) and scale themselves to the window, leaving a margin around the edge. Add `fixed` to the project file and the popup scales the page in proportion, edge to edge, with no margin or background fill:
+
+```js
+fixed: { width: 1920, height: 1080, pad: function (w) { return 0; } }
+```
+
+`pad` is the margin the page leaves at a given window width. Copy the page's own rule so the popup can crop it exactly. See `projects/startrek.js`.

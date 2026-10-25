@@ -66,6 +66,14 @@
     '#lv-popup .lv-load span{display:inline-flex;align-items:center;gap:10px}',
     '#lv-popup .lv-load span::before{content:"";width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:lv-spin .8s linear infinite}',
     '#lv-popup .lv-canvas.is-loaded .lv-load{opacity:0}',
+    /* fixed-stage mode: a fixed-size page scaled to fit, edge to edge, no letterbox fill */
+    '#lv-popup .lv-canvas.is-fixed{background:transparent;border:0;border-radius:0;align-items:center}',
+    '#lv-popup .lv-canvas.is-fixed .lv-frame{flex:none;overflow:hidden;border-radius:14px;background:var(--lv-stage)}',
+    '#lv-popup .lv-canvas.is-fixed .lv-frame iframe{position:absolute;width:auto;height:auto}',
+    '#lv-popup .lv-canvas.is-fixed .lv-load{inset:auto;border-radius:14px}',
+    '#lv-popup .lv-stage:fullscreen .lv-canvas.is-fixed .lv-frame{border-radius:0}',
+    '#lv-popup .lv-scroll.is-short .lv-stage:not(:fullscreen){height:auto;min-height:0}',
+    '#lv-popup .lv-scroll.is-short .lv-stage:not(:fullscreen) .lv-canvas{flex:none}',
     '@keyframes lv-spin{to{transform:rotate(1turn)}}',
     '@media (prefers-reduced-motion:reduce){#lv-popup .lv-load span::before{animation:none}}',
     '#lv-popup .lv-stage:fullscreen{background:var(--lv-stage);padding:12px}',
@@ -96,7 +104,7 @@
     '#lv-popup .lv-copy h3{font-size:28px}}'
   ].join('');
 
-  var registry = {}, pending = {}, root = null, current = null, lastFocus = null, closeT = 0;
+  var registry = {}, pending = {}, root = null, current = null, fixed = null, lastFocus = null, closeT = 0;
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function q(s) { return root.querySelector(s); }
@@ -135,11 +143,40 @@
     root.querySelectorAll('[data-lv-close]').forEach(function (b) { b.addEventListener('click', close); });
     q('[data-lv-reload]').addEventListener('click', function () { var f = q('.lv-frame iframe'); if (f) mountFrame(f.getAttribute('src')); });
     q('[data-lv-full]').addEventListener('click', toggleFull);
+    if (window.ResizeObserver) new ResizeObserver(layoutFixed).observe(q('.lv-canvas'));
+    else window.addEventListener('resize', layoutFixed);
     document.addEventListener('fullscreenchange', function () {
       var on = document.fullscreenElement === q('.lv-stage');
       q('[data-lv-full]').setAttribute('aria-label', on ? 'Exit full screen' : 'View full screen');
     });
     return root;
+  }
+
+  /* Fixed-stage pages (e.g. a 1920x1080 stage that scales itself to the window and keeps its own
+     margin): size the iframe so that page's stage lands exactly on the visible box, then crop the
+     margin off. The page renders at its real on-screen size, so it stays sharp and clicks line up. */
+  function layoutFixed() {
+    var canvas = q('.lv-canvas'), frame = q('.lv-frame'), load = q('.lv-load'), f = frame.querySelector('iframe');
+    var sc = q('.lv-scroll'), stage = q('.lv-stage');
+    if (!fixed) { frame.removeAttribute('style'); load.removeAttribute('style'); canvas.style.height = ''; sc.classList.remove('is-short'); return; }
+    /* Narrow, tall screens: let the canvas shrink to the stage's height so the notes follow it. */
+    var full = document.fullscreenElement === stage;
+    var room = sc.clientHeight - (sc.classList.contains('has-notes') ? 64 : 0) - q('.lv-tools').offsetHeight - 12 - 32;
+    var short = !full && canvas.clientWidth * fixed.height / fixed.width < room - 48;
+    sc.classList.toggle('is-short', short);
+    canvas.style.height = short ? Math.ceil(canvas.clientWidth * fixed.height / fixed.width) + 'px' : '';
+    var W = fixed.width, H = fixed.height, padFn = fixed.pad || function () { return 0; };
+    var cw = canvas.clientWidth, ch = canvas.clientHeight;
+    if (!cw || !ch) return;
+    var dw = Math.max(1, Math.floor(Math.min(cw, ch * W / H)));   /* visible width, whole pixels */
+    var s = dw / W, dh = H * s;
+    var p = padFn(dw), iw = dw + 2 * p;
+    for (var i = 0; i < 6; i++) { var np = padFn(iw); if (np === p) break; p = np; iw = dw + 2 * p; }
+    var ih = Math.ceil(dh) + 2 * p + 2;                            /* a little extra height so width sets the scale */
+    frame.style.width = dw + 'px'; frame.style.height = dh + 'px';
+    load.style.width = dw + 'px'; load.style.height = dh + 'px';
+    load.style.left = (cw - dw) / 2 + 'px'; load.style.top = (ch - dh) / 2 + 'px';
+    if (f) { f.style.width = iw + 'px'; f.style.height = ih + 'px'; f.style.left = -p + 'px'; f.style.top = -(ih - dh) / 2 + 'px'; }
   }
 
   function mountFrame(src, title) {
@@ -148,12 +185,13 @@
     frame.innerHTML = '';
     var f = document.createElement('iframe');
     f.title = title || q('#lv-popup-title').textContent || 'Live preview';
-    f.setAttribute('allow', 'fullscreen; autoplay; xr-spatial-tracking; accelerometer; gyroscope; clipboard-write');
+    f.setAttribute('allow', 'fullscreen; autoplay; xr-spatial-tracking; accelerometer; gyroscope; clipboard-write; gamepad');
     f.setAttribute('allowfullscreen', '');
     f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
     f.addEventListener('load', function () { canvas.classList.add('is-loaded'); });
     f.src = src;
     frame.appendChild(f);
+    layoutFixed();
   }
 
   function toggleFull() {
@@ -209,6 +247,8 @@
     a.setAttribute('aria-label', (C.openLabel || 'Open site') + ' in a new tab'); a.title = C.openLabel || 'Open site';
     var notes = q('.lv-notes'), html = notesHtml(C);
     notes.innerHTML = html; notes.hidden = !html; q('.lv-scroll').classList.toggle('has-notes', !!html);
+    fixed = C.fixed || null;
+    q('.lv-canvas').classList.toggle('is-fixed', !!fixed);
     current = key;
     q('.lv-scroll').scrollTop = 0;
     mountFrame(C.url, C.name);
@@ -226,6 +266,7 @@
     load(id).then(function (C) { show(C, id); }).catch(function (err) {
       q('#lv-popup-title').textContent = 'Preview unavailable';
       q('.lv-frame').innerHTML = '<p class="lv-error">This preview could not be loaded. Check your connection and try again.</p>';
+      fixed = null; q('.lv-canvas').classList.remove('is-fixed'); layoutFixed();
       q('.lv-canvas').classList.add('is-loaded');
       current = null;
       if (window.console) console.warn('[LivePopup]', err.message);
@@ -239,7 +280,7 @@
     root.classList.remove('is-open'); root.classList.add('is-closing'); root.setAttribute('aria-hidden', 'true');
     closeT = setTimeout(function () {
       root.classList.remove('is-closing'); document.documentElement.style.overflow = '';
-      q('.lv-frame').innerHTML = ''; current = null; /* unload the site so 3D, audio and video stop */
+      q('.lv-frame').innerHTML = ''; current = null; fixed = null; q('.lv-scroll').classList.remove('is-short'); q('.lv-canvas').classList.remove('is-fixed'); layoutFixed(); /* unload the site so 3D, audio and video stop */
     }, 600);
     if (history.replaceState && /#live-/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
     if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
