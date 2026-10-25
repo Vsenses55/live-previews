@@ -1,13 +1,11 @@
 /* PXL Agency — 3D logo exploration. Opened by #live-pxl.
-   Colors and font come from the viewer's own CSS (--coral, --paper, --ink, Baloo 2).
+   Colors come from the viewer's own CSS (--coral, --paper). Fonts follow the site (Merriweather / Montserrat).
    Copy below is a DRAFT: edit intro/meta to match the case study. */
 LivePopup.register('pxl', {
   name: 'PXL Agency Design Exploration',
   url: 'https://vsenses55.github.io/pxl-3d-viewer/',
   openLabel: 'Open viewer',
 
-  font: '"Baloo 2", system-ui, -apple-system, sans-serif',
-  fontUrl: 'https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&display=swap',
   accent: '#fa4f68',      /* PXL coral, used for the focus ring */
   stage: '#17111a',       /* PXL paper, shows behind the canvas while it loads */
 
