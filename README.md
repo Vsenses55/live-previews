@@ -9,6 +9,7 @@ live-engine.js     the popup: sheet, canvas, reload / full screen / open buttons
 projects/pxl.js        PXL Agency 3D logo viewer
 projects/startrek.js   Star Trek asteroid game (fixed 1920×1080 stage)
 projects/momochan.js   Momochan sliced cat (3D sound piece)
+projects/paramount.js  Paramount VX landing page
 index.html         test page listing every project
 ```
 

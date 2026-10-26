@@ -194,7 +194,11 @@
     f.setAttribute('allow', 'fullscreen; autoplay; xr-spatial-tracking; accelerometer; gyroscope; clipboard-write; gamepad');
     f.setAttribute('allowfullscreen', '');
     f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-    f.addEventListener('load', function () { canvas.classList.add('is-loaded'); });
+    /* Lift the loading cover on load, or after 4s for pages that keep pulling in heavy media
+       after they are already visible. */
+    clearTimeout(mountFrame.t);
+    mountFrame.t = setTimeout(function () { canvas.classList.add('is-loaded'); }, 4000);
+    f.addEventListener('load', function () { clearTimeout(mountFrame.t); canvas.classList.add('is-loaded'); });
     f.src = src;
     frame.appendChild(f);
     layoutFixed();
