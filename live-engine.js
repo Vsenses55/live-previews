@@ -163,6 +163,7 @@
     q('[data-lv-full]').addEventListener('click', toggleFull);
     if (window.ResizeObserver) new ResizeObserver(layout).observe(q('.lv-canvas'));
     else window.addEventListener('resize', layout);
+    guardScroll(q('.lv-scroll'));
     document.addEventListener('fullscreenchange', function () {
       var on = document.fullscreenElement === q('.lv-stage');
       q('[data-lv-full]').setAttribute('aria-label', on ? 'Exit full screen' : 'View full screen');
@@ -202,6 +203,23 @@
     load.style.width = dw + 'px'; load.style.height = dh + 'px';
     load.style.left = (cw - dw) / 2 + 'px'; load.style.top = (ch - dh) / 2 + 'px';
     if (f) { f.style.width = iw + 'px'; f.style.height = ih + 'px'; f.style.left = -p + 'px'; f.style.top = -(ih - dh) / 2 + 'px'; }
+  }
+
+  /* Some browsers (Safari) let scrollIntoView() inside the preview scroll the popup itself, which
+     pulls the canvas out of view (e.g. a map that expands and scrolls a list item into view).
+     While focus is inside the preview, undo any popup scroll that didn't come from the viewer's
+     own wheel, touch, keys or scrollbar on the popup. */
+  var intentAt = 0;
+  function guardScroll(sc) {
+    var last = 0, mark = function () { intentAt = Date.now(); };
+    ['wheel', 'touchstart', 'touchmove', 'pointerdown'].forEach(function (t) { sc.addEventListener(t, mark, { passive: true }); });
+    document.addEventListener('keydown', function () { if (root && root.classList.contains('is-open')) mark(); });
+    sc.addEventListener('scroll', function () {
+      var f = q('.lv-frame iframe');
+      var inPreview = f && document.activeElement === f;
+      if (inPreview && Date.now() - intentAt > 800 && Math.abs(sc.scrollTop - last) > 1) { sc.scrollTop = last; return; }
+      last = sc.scrollTop;
+    }, { passive: true });
   }
 
   function mountFrame(src, title) {
@@ -282,7 +300,7 @@
     phone = fixed ? null : (C.phone ? { width: C.phone.width || 390, height: C.phone.height || 844, screen: C.phone.screen } : null);
     q('.lv-canvas').classList.toggle('is-fixed', !!fixed);
     current = key;
-    q('.lv-scroll').scrollTop = 0;
+    intentAt = Date.now(); q('.lv-scroll').scrollTop = 0;
     mountFrame(C.url, C.name);
   }
 
