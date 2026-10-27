@@ -11,6 +11,12 @@
  * Open from any element:     data-live-open="<id>"
  * Deep link from another page: /projects/pxl#live-pxl
  * No project file needed:    data-live-src="https://…" data-live-title="Name"
+ *
+ * Layout modes (set in a project file):
+ *   default   the page fills the canvas (responsive sites, full-window 3D)
+ *   phone     a mobile-first page shown at phone width in a centered phone frame on wide
+ *             screens; on phones it simply fills the canvas
+ *   fixed     a fixed-size stage (e.g. 1920x1080) scaled to fit, its own margin cropped off
  */
 (function () {
   'use strict';
@@ -36,7 +42,7 @@
     '#lv-popup a{text-decoration:none}',
     '#lv-popup :focus-visible{outline:2px solid var(--lv-accent);outline-offset:2px}',
     '#lv-popup{--scrim:rgb(0 0 0 / .55);--sheet:#f6f6f4;--ink:#1d1d1b;--muted:#66665f;--line:#e3e3df;--dock:#1d1d1b;--chip:#ebebe7;--ease:cubic-bezier(.2,.8,.2,1);',
-    '--lv-font:Merriweather,Georgia,"Times New Roman",serif;--lv-ui:Montserrat,system-ui,-apple-system,"Segoe UI",sans-serif;--lv-accent:#1d1d1b;--lv-on-accent:#fff;--lv-stage:#111;--lv-stage-ink:rgb(255 255 255 / .75);--lv-bar-h:65px;',
+    '--lv-font:Merriweather,Georgia,"Times New Roman",serif;--lv-ui:Montserrat,system-ui,-apple-system,"Segoe UI",sans-serif;--lv-accent:#1d1d1b;--lv-on-accent:#fff;--lv-stage:#111;--lv-screen:#fff;--lv-stage-ink:rgb(255 255 255 / .75);--lv-bar-h:65px;',
     'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;justify-content:flex-end;visibility:hidden}',
     '#lv-popup.is-open,#lv-popup.is-closing{visibility:visible}',
     '#lv-popup .lv-scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;transition:opacity .45s var(--ease)}',
@@ -74,6 +80,12 @@
     '#lv-popup .lv-stage:fullscreen .lv-canvas.is-fixed .lv-frame{border-radius:0}',
     '#lv-popup .lv-scroll.is-short .lv-stage:not(:fullscreen){height:auto;min-height:0}',
     '#lv-popup .lv-scroll.is-short .lv-stage:not(:fullscreen) .lv-canvas{flex:none}',
+    /* phone mode: a mobile-first page at phone width, centered in a phone frame, no fill around it */
+    '#lv-popup .lv-canvas.is-phone{background:transparent;border:0;border-radius:0;align-items:center;overflow:visible}',
+    '#lv-popup .lv-canvas.is-phone .lv-frame{flex:none;width:var(--lv-pw);height:100%;max-height:var(--lv-ph);padding:12px;border-radius:54px;background:#fff;border:1px solid #dcdcd7;box-shadow:0 1px 2px rgb(0 0 0 / .04),0 16px 40px rgb(0 0 0 / .08)}',
+    '#lv-popup .lv-canvas.is-phone .lv-frame iframe{border-radius:42px;background:var(--lv-screen);outline:1px solid #e6e6e1;outline-offset:0}',
+    '#lv-popup .lv-canvas.is-phone .lv-load{background:transparent;color:var(--muted)}',
+    '#lv-popup .lv-stage:fullscreen .lv-canvas.is-phone .lv-load{color:rgb(255 255 255 / .7)}',
     '@keyframes lv-spin{to{transform:rotate(1turn)}}',
     '@media (prefers-reduced-motion:reduce){#lv-popup .lv-load span::before{animation:none}}',
     '#lv-popup .lv-stage:fullscreen{background:var(--lv-stage);padding:12px}',
@@ -104,7 +116,7 @@
     '#lv-popup .lv-copy h3{font-size:28px}}'
   ].join('');
 
-  var registry = {}, pending = {}, root = null, current = null, fixed = null, lastFocus = null, closeT = 0;
+  var registry = {}, pending = {}, root = null, current = null, fixed = null, phone = null, lastFocus = null, closeT = 0;
 
   function isLight(hex) {
     var m = String(hex).replace('#', ''); if (m.length === 3) m = m.replace(/./g, '$&$&');
@@ -149,8 +161,8 @@
     root.querySelectorAll('[data-lv-close]').forEach(function (b) { b.addEventListener('click', close); });
     q('[data-lv-reload]').addEventListener('click', function () { var f = q('.lv-frame iframe'); if (f) mountFrame(f.getAttribute('src')); });
     q('[data-lv-full]').addEventListener('click', toggleFull);
-    if (window.ResizeObserver) new ResizeObserver(layoutFixed).observe(q('.lv-canvas'));
-    else window.addEventListener('resize', layoutFixed);
+    if (window.ResizeObserver) new ResizeObserver(layout).observe(q('.lv-canvas'));
+    else window.addEventListener('resize', layout);
     document.addEventListener('fullscreenchange', function () {
       var on = document.fullscreenElement === q('.lv-stage');
       q('[data-lv-full]').setAttribute('aria-label', on ? 'Exit full screen' : 'View full screen');
@@ -161,8 +173,15 @@
   /* Fixed-stage pages (e.g. a 1920x1080 stage that scales itself to the window and keeps its own
      margin): size the iframe so that page's stage lands exactly on the visible box, then crop the
      margin off. The page renders at its real on-screen size, so it stays sharp and clicks line up. */
-  function layoutFixed() {
+  function layout() {
     var canvas = q('.lv-canvas'), frame = q('.lv-frame'), load = q('.lv-load'), f = frame.querySelector('iframe');
+    /* Phone mode: on wide canvases show the page at phone width in a centered frame (12px bezel
+       + 1px border each side); on narrow ones (a real phone) let it fill the canvas. */
+    if (phone) {
+      var pw = phone.width + 26, ph = phone.height + 26;
+      canvas.style.setProperty('--lv-pw', pw + 'px'); canvas.style.setProperty('--lv-ph', ph + 'px');
+      canvas.classList.toggle('is-phone', canvas.clientWidth >= pw + 64);
+    } else { canvas.classList.remove('is-phone'); canvas.style.removeProperty('--lv-pw'); canvas.style.removeProperty('--lv-ph'); }
     var sc = q('.lv-scroll'), stage = q('.lv-stage');
     if (!fixed) { frame.removeAttribute('style'); load.removeAttribute('style'); canvas.style.height = ''; sc.classList.remove('is-short'); return; }
     /* Narrow, tall screens: let the canvas shrink to the stage's height so the notes follow it. */
@@ -201,7 +220,7 @@
     f.addEventListener('load', function () { clearTimeout(mountFrame.t); canvas.classList.add('is-loaded'); });
     f.src = src;
     frame.appendChild(f);
-    layoutFixed();
+    layout();
   }
 
   function toggleFull() {
@@ -249,7 +268,8 @@
       C.accent ? '--lv-accent:' + C.accent : '',
       C.onAccent ? '--lv-on-accent:' + C.onAccent : '',
       C.stage ? '--lv-stage:' + C.stage : '',
-      C.stage && isLight(C.stage) ? '--lv-stage-ink:rgb(0 0 0 / .6)' : ''
+      C.stage && isLight(C.stage) ? '--lv-stage-ink:rgb(0 0 0 / .6)' : '',
+      C.phone && C.phone.screen ? '--lv-screen:' + C.phone.screen : ''
     ].filter(Boolean).join(';'));
     if (C.fontUrl && !document.querySelector('link[data-lv-font="' + key + '"]')) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = C.fontUrl; l.setAttribute('data-lv-font', key); document.head.appendChild(l); }
     q('#lv-popup-title').textContent = C.name || 'Live preview';
@@ -259,6 +279,7 @@
     var notes = q('.lv-notes'), html = notesHtml(C);
     notes.innerHTML = html; notes.hidden = !html; q('.lv-scroll').classList.toggle('has-notes', !!html);
     fixed = C.fixed || null;
+    phone = fixed ? null : (C.phone ? { width: C.phone.width || 390, height: C.phone.height || 844, screen: C.phone.screen } : null);
     q('.lv-canvas').classList.toggle('is-fixed', !!fixed);
     current = key;
     q('.lv-scroll').scrollTop = 0;
@@ -277,7 +298,7 @@
     load(id).then(function (C) { show(C, id); }).catch(function (err) {
       q('#lv-popup-title').textContent = 'Preview unavailable';
       q('.lv-frame').innerHTML = '<p class="lv-error">This preview could not be loaded. Check your connection and try again.</p>';
-      fixed = null; q('.lv-canvas').classList.remove('is-fixed'); layoutFixed();
+      fixed = null; phone = null; q('.lv-canvas').classList.remove('is-fixed'); layout();
       q('.lv-canvas').classList.add('is-loaded');
       current = null;
       if (window.console) console.warn('[LivePopup]', err.message);
@@ -291,7 +312,7 @@
     root.classList.remove('is-open'); root.classList.add('is-closing'); root.setAttribute('aria-hidden', 'true');
     closeT = setTimeout(function () {
       root.classList.remove('is-closing'); document.documentElement.style.overflow = '';
-      q('.lv-frame').innerHTML = ''; current = null; fixed = null; q('.lv-scroll').classList.remove('is-short'); q('.lv-canvas').classList.remove('is-fixed'); layoutFixed(); /* unload the site so 3D, audio and video stop */
+      q('.lv-frame').innerHTML = ''; current = null; fixed = null; phone = null; q('.lv-scroll').classList.remove('is-short'); q('.lv-canvas').classList.remove('is-fixed'); layout(); /* unload the site so 3D, audio and video stop */
     }, 600);
     if (history.replaceState && /#live-/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
     if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });

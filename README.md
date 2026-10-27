@@ -10,6 +10,7 @@ projects/pxl.js        PXL Agency 3D logo viewer
 projects/startrek.js   Star Trek asteroid game (fixed 1920×1080 stage)
 projects/momochan.js   Momochan sliced cat (3D sound piece)
 projects/paramount.js  Paramount VX landing page
+projects/santamonica.js  City of Santa Monica Big Blue Bus mobile prototype (phone frame)
 index.html         test page listing every project
 ```
 
@@ -48,6 +49,16 @@ Only sites that allow being framed. GitHub Pages sites do. Webflow pages (includ
 ## Updating
 
 Edit the file and push. GitHub Pages can cache files for up to 10 minutes; to force an update, change the script tag to `live-engine.js?v=2` (the version is passed on to every project file).
+
+## Mobile-first pages
+
+For a site designed for phones, add `phone` to the project file. On wide screens the popup shows it at phone width in a centered phone frame, with no background fill around it. On a phone it simply fills the canvas.
+
+```js
+phone: { width: 390, height: 844, screen: '#FFFFFF' }
+```
+
+`width` and `height` are the phone's screen size; `screen` is the color behind the page while it loads. See `projects/santamonica.js`.
 
 ## Fixed-size pages
 
