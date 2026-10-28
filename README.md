@@ -11,6 +11,7 @@ projects/startrek.js   Star Trek asteroid game (fixed 1920×1080 stage)
 projects/momochan.js   Momochan sliced cat (3D sound piece)
 projects/paramount.js  Paramount VX landing page
 projects/santamonica.js  City of Santa Monica Big Blue Bus mobile prototype (phone frame)
+projects/nysf.js       New York State Fair app (phone frame)
 index.html         test page listing every project
 ```
 
