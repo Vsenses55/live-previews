@@ -84,6 +84,11 @@
     '#lv-popup .lv-canvas.is-phone{background:transparent;border:0;border-radius:0;align-items:center;overflow:visible}',
     '#lv-popup .lv-canvas.is-phone .lv-frame{flex:none;width:var(--lv-pw);height:100%;max-height:var(--lv-ph);padding:12px;border-radius:54px;background:#fff;border:1px solid #dcdcd7;box-shadow:0 1px 2px rgb(0 0 0 / .04),0 16px 40px rgb(0 0 0 / .08)}',
     '#lv-popup .lv-canvas.is-phone .lv-frame iframe{border-radius:42px;background:var(--lv-screen);outline:1px solid #e6e6e1;outline-offset:0}',
+    /* hideScrollbar: the iframe is wider than the screen by the scrollbar's width; the screen clips that strip */
+    '#lv-popup .lv-clip{width:100%;height:100%;overflow:hidden}',
+    '#lv-popup .lv-clip iframe{width:calc(100% + var(--lv-sbw,0px))}',
+    '#lv-popup .lv-canvas.is-phone .lv-clip{border-radius:42px;outline:1px solid #e6e6e1;background:var(--lv-screen)}',
+    '#lv-popup .lv-canvas.is-phone .lv-clip iframe{border-radius:0;outline:0}',
     '#lv-popup .lv-canvas.is-phone .lv-load{background:transparent;color:var(--muted)}',
     '#lv-popup .lv-stage:fullscreen .lv-canvas.is-phone .lv-load{color:rgb(255 255 255 / .7)}',
     '@keyframes lv-spin{to{transform:rotate(1turn)}}',
@@ -222,6 +227,13 @@
     }, { passive: true });
   }
 
+  /* Width of a classic scrollbar in this browser (0 where scrollbars overlay the content). */
+  function scrollbarWidth() {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:absolute;top:-999px;width:100px;height:100px;overflow:scroll';
+    document.body.appendChild(d); var w = d.offsetWidth - d.clientWidth; d.remove(); return w;
+  }
+
   function mountFrame(src, title) {
     var canvas = q('.lv-canvas'), frame = q('.lv-frame');
     canvas.classList.remove('is-loaded');
@@ -237,7 +249,11 @@
     mountFrame.t = setTimeout(function () { canvas.classList.add('is-loaded'); }, 4000);
     f.addEventListener('load', function () { clearTimeout(mountFrame.t); canvas.classList.add('is-loaded'); });
     f.src = src;
-    frame.appendChild(f);
+    if (phone && phone.hideScrollbar) {
+      var clip = document.createElement('div'); clip.className = 'lv-clip';
+      clip.style.setProperty('--lv-sbw', scrollbarWidth() + 'px');
+      clip.appendChild(f); frame.appendChild(clip);
+    } else frame.appendChild(f);
     layout();
   }
 
@@ -297,7 +313,7 @@
     var notes = q('.lv-notes'), html = notesHtml(C);
     notes.innerHTML = html; notes.hidden = !html; q('.lv-scroll').classList.toggle('has-notes', !!html);
     fixed = C.fixed || null;
-    phone = fixed ? null : (C.phone ? { width: C.phone.width || 390, height: C.phone.height || 844, screen: C.phone.screen } : null);
+    phone = fixed ? null : (C.phone ? { width: C.phone.width || 390, height: C.phone.height || 844, screen: C.phone.screen, hideScrollbar: !!C.phone.hideScrollbar } : null);
     q('.lv-canvas').classList.toggle('is-fixed', !!fixed);
     current = key;
     intentAt = Date.now(); q('.lv-scroll').scrollTop = 0;

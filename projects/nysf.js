@@ -11,7 +11,7 @@ LivePopup.register('nysf', {
 
   accent: '#098944',      /* NYSF primary green, used for the focus ring */
   stage: '#0A0F12',       /* the app's darkest neutral; fills the screen in full-screen view */
-  phone: { width: 430, height: 932, screen: '#19262D' },
+  phone: { width: 430, height: 932, screen: '#19262D', hideScrollbar: true },  /* the app shows a scrollbar when framed; clip it off */
 
   eyebrow: 'Mobile app prototype',
   heading: 'One app for the Fair and the Fairgrounds',

@@ -59,7 +59,7 @@ For a site designed for phones, add `phone` to the project file. On wide screens
 phone: { width: 390, height: 844, screen: '#FFFFFF' }
 ```
 
-`width` and `height` are the phone's screen size; `screen` is the color behind the page while it loads. See `projects/santamonica.js`.
+`width` and `height` are the phone's screen size; `screen` is the color behind the page while it loads. Add `hideScrollbar: true` if the page shows a scrollbar inside the frame: the popup makes the page wider by the scrollbar's width and clips that strip off, so it still scrolls with no visible bar. Leave it off for pages that already hide their own scrollbar (Santa Monica), or their right edge gets clipped. See `projects/santamonica.js`.
 
 ## Fixed-size pages
 
