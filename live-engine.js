@@ -87,9 +87,10 @@
     /* appFrame: the page has its own phone layout on wide windows (a centered device with a hidden
        scrollbar). The iframe gets a window that size and the screen crops to exactly that device. */
     '#lv-popup .lv-clip{position:relative;width:100%;height:100%;overflow:hidden}',
-    '#lv-popup .lv-canvas.is-phone .lv-clip{border-radius:42px;outline:1px solid #e6e6e1;background:var(--lv-screen)}',
+    '#lv-popup .lv-canvas.is-phone .lv-clip{border-radius:42px;clip-path:inset(0 round 42px);-webkit-mask-image:-webkit-radial-gradient(white,black);mask-image:radial-gradient(white,black);transform:translateZ(0);isolation:isolate;background:var(--lv-screen)}',
+    '#lv-popup .lv-canvas.is-phone .lv-clip::after{content:"";position:absolute;inset:0;border-radius:42px;box-shadow:inset 0 0 0 1px #e6e6e1;pointer-events:none}',
     '#lv-popup .lv-canvas.is-phone .lv-clip iframe{border-radius:0;outline:0}',
-    '#lv-popup .lv-canvas.is-appframe .lv-clip iframe{position:absolute;width:var(--lv-aw);height:calc(100% + 2 * var(--lv-apy));left:calc(50% - var(--lv-aw) / 2);top:calc(-1 * var(--lv-apy));max-width:none}',
+    '#lv-popup .lv-canvas.is-appframe .lv-clip iframe{position:absolute;max-width:none;transform-origin:0 0}',
     '#lv-popup .lv-canvas.is-phone .lv-load{background:transparent;color:var(--muted)}',
     '#lv-popup .lv-stage:fullscreen .lv-canvas.is-phone .lv-load{color:rgb(255 255 255 / .7)}',
     '@keyframes lv-spin{to{transform:rotate(1turn)}}',
@@ -187,12 +188,25 @@
     if (phone) {
       var pw = phone.width + 26, ph = phone.height + 26;
       canvas.style.setProperty('--lv-pw', pw + 'px'); canvas.style.setProperty('--lv-ph', ph + 'px');
-      canvas.classList.toggle('is-phone', canvas.clientWidth >= pw + 64);
-      /* appFrame: only when the window we hand the page is tall enough for its own phone layout */
+      var isPhone = canvas.clientWidth >= pw + 64;
+      canvas.classList.toggle('is-phone', isPhone);
+      /* appFrame: hand the page a window big enough for its own phone layout and crop to its device.
+         If the screen is shorter than that layout's minimum, render it at the minimum and scale the
+         whole phone down to fit, so the page never falls back to its plain (scrollbar) view. */
       var af = phone.appFrame, clipEl = frame.querySelector('.lv-clip');
-      var useAf = !!(af && clipEl && canvas.classList.contains('is-phone') && clipEl.clientHeight + 2 * af.padY >= af.minHeight);
+      var useAf = !!(af && clipEl && f && isPhone);
       canvas.classList.toggle('is-appframe', useAf);
-      if (af) { canvas.style.setProperty('--lv-aw', af.width + 'px'); canvas.style.setProperty('--lv-apy', af.padY + 'px'); }
+      if (useAf) {
+        var H = Math.min(canvas.clientHeight, ph) - 26, need = Math.max(1, af.minHeight - 2 * af.padY);
+        var sw = H >= need ? phone.width : Math.max(200, Math.round(phone.width * H / need));
+        var sc = sw / phone.width;
+        canvas.style.setProperty('--lv-pw', (sw + 26) + 'px');
+        f.style.width = af.width + 'px';
+        f.style.height = (H / sc + 2 * af.padY) + 'px';
+        f.style.left = -((af.width - phone.width) / 2) * sc + 'px';
+        f.style.top = -af.padY * sc + 'px';
+        f.style.transform = sc < 1 ? 'scale(' + sc + ')' : '';
+      } else if (f && af) { f.style.width = f.style.height = f.style.left = f.style.top = f.style.transform = ''; }
     } else { canvas.classList.remove('is-phone', 'is-appframe'); canvas.style.removeProperty('--lv-pw'); canvas.style.removeProperty('--lv-ph'); }
     var sc = q('.lv-scroll'), stage = q('.lv-stage');
     if (!fixed) { frame.removeAttribute('style'); load.removeAttribute('style'); canvas.style.height = ''; sc.classList.remove('is-short'); return; }
