@@ -84,11 +84,12 @@
     '#lv-popup .lv-canvas.is-phone{background:transparent;border:0;border-radius:0;align-items:center;overflow:visible}',
     '#lv-popup .lv-canvas.is-phone .lv-frame{flex:none;width:var(--lv-pw);height:100%;max-height:var(--lv-ph);padding:12px;border-radius:54px;background:#fff;border:1px solid #dcdcd7;box-shadow:0 1px 2px rgb(0 0 0 / .04),0 16px 40px rgb(0 0 0 / .08)}',
     '#lv-popup .lv-canvas.is-phone .lv-frame iframe{border-radius:42px;background:var(--lv-screen);outline:1px solid #e6e6e1;outline-offset:0}',
-    /* hideScrollbar: the iframe is wider than the screen by the scrollbar's width; the screen clips that strip */
-    '#lv-popup .lv-clip{width:100%;height:100%;overflow:hidden}',
-    '#lv-popup .lv-clip iframe{width:calc(100% + var(--lv-sbw,0px))}',
+    /* appFrame: the page has its own phone layout on wide windows (a centered device with a hidden
+       scrollbar). The iframe gets a window that size and the screen crops to exactly that device. */
+    '#lv-popup .lv-clip{position:relative;width:100%;height:100%;overflow:hidden}',
     '#lv-popup .lv-canvas.is-phone .lv-clip{border-radius:42px;outline:1px solid #e6e6e1;background:var(--lv-screen)}',
     '#lv-popup .lv-canvas.is-phone .lv-clip iframe{border-radius:0;outline:0}',
+    '#lv-popup .lv-canvas.is-appframe .lv-clip iframe{position:absolute;width:var(--lv-aw);height:calc(100% + 2 * var(--lv-apy));left:calc(50% - var(--lv-aw) / 2);top:calc(-1 * var(--lv-apy));max-width:none}',
     '#lv-popup .lv-canvas.is-phone .lv-load{background:transparent;color:var(--muted)}',
     '#lv-popup .lv-stage:fullscreen .lv-canvas.is-phone .lv-load{color:rgb(255 255 255 / .7)}',
     '@keyframes lv-spin{to{transform:rotate(1turn)}}',
@@ -187,7 +188,12 @@
       var pw = phone.width + 26, ph = phone.height + 26;
       canvas.style.setProperty('--lv-pw', pw + 'px'); canvas.style.setProperty('--lv-ph', ph + 'px');
       canvas.classList.toggle('is-phone', canvas.clientWidth >= pw + 64);
-    } else { canvas.classList.remove('is-phone'); canvas.style.removeProperty('--lv-pw'); canvas.style.removeProperty('--lv-ph'); }
+      /* appFrame: only when the window we hand the page is tall enough for its own phone layout */
+      var af = phone.appFrame, clipEl = frame.querySelector('.lv-clip');
+      var useAf = !!(af && clipEl && canvas.classList.contains('is-phone') && clipEl.clientHeight + 2 * af.padY >= af.minHeight);
+      canvas.classList.toggle('is-appframe', useAf);
+      if (af) { canvas.style.setProperty('--lv-aw', af.width + 'px'); canvas.style.setProperty('--lv-apy', af.padY + 'px'); }
+    } else { canvas.classList.remove('is-phone', 'is-appframe'); canvas.style.removeProperty('--lv-pw'); canvas.style.removeProperty('--lv-ph'); }
     var sc = q('.lv-scroll'), stage = q('.lv-stage');
     if (!fixed) { frame.removeAttribute('style'); load.removeAttribute('style'); canvas.style.height = ''; sc.classList.remove('is-short'); return; }
     /* Narrow, tall screens: let the canvas shrink to the stage's height so the notes follow it. */
@@ -227,13 +233,6 @@
     }, { passive: true });
   }
 
-  /* Width of a classic scrollbar in this browser (0 where scrollbars overlay the content). */
-  function scrollbarWidth() {
-    var d = document.createElement('div');
-    d.style.cssText = 'position:absolute;top:-999px;width:100px;height:100px;overflow:scroll';
-    document.body.appendChild(d); var w = d.offsetWidth - d.clientWidth; d.remove(); return w;
-  }
-
   function mountFrame(src, title) {
     var canvas = q('.lv-canvas'), frame = q('.lv-frame');
     canvas.classList.remove('is-loaded');
@@ -249,9 +248,8 @@
     mountFrame.t = setTimeout(function () { canvas.classList.add('is-loaded'); }, 4000);
     f.addEventListener('load', function () { clearTimeout(mountFrame.t); canvas.classList.add('is-loaded'); });
     f.src = src;
-    if (phone && phone.hideScrollbar) {
+    if (phone && phone.appFrame) {
       var clip = document.createElement('div'); clip.className = 'lv-clip';
-      clip.style.setProperty('--lv-sbw', scrollbarWidth() + 'px');
       clip.appendChild(f); frame.appendChild(clip);
     } else frame.appendChild(f);
     layout();
@@ -313,7 +311,7 @@
     var notes = q('.lv-notes'), html = notesHtml(C);
     notes.innerHTML = html; notes.hidden = !html; q('.lv-scroll').classList.toggle('has-notes', !!html);
     fixed = C.fixed || null;
-    phone = fixed ? null : (C.phone ? { width: C.phone.width || 390, height: C.phone.height || 844, screen: C.phone.screen, hideScrollbar: !!C.phone.hideScrollbar } : null);
+    phone = fixed ? null : (C.phone ? { width: C.phone.width || 390, height: C.phone.height || 844, screen: C.phone.screen, appFrame: C.phone.appFrame ? { width: C.phone.appFrame.width || 600, padY: C.phone.appFrame.padY || 0, minHeight: C.phone.appFrame.minHeight || 0 } : null } : null);
     q('.lv-canvas').classList.toggle('is-fixed', !!fixed);
     current = key;
     intentAt = Date.now(); q('.lv-scroll').scrollTop = 0;

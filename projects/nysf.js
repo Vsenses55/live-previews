@@ -1,7 +1,7 @@
 /* New York State Fair app (The Fair + Fairgrounds). Opened by #live-nysf.
    Mobile-first, so `phone` shows it at phone width in a centered phone frame on wide screens
-   and lets it fill the canvas on a phone. The app draws its own phone frame only at 600px+,
-   so inside the 430px frame it shows as the plain mobile app.
+   and lets it fill the canvas on a phone. `appFrame` uses the app's own 600px+ phone layout
+   inside the frame, cropped to its device, so the scrollbar stays hidden and content centered.
    Not the same as the NYSF design system popup (#ds-nysf); the two never interact.
    Copy below is a DRAFT: edit intro/meta to match the case study. */
 LivePopup.register('nysf', {
@@ -11,7 +11,12 @@ LivePopup.register('nysf', {
 
   accent: '#098944',      /* NYSF primary green, used for the focus ring */
   stage: '#0A0F12',       /* the app's darkest neutral; fills the screen in full-screen view */
-  phone: { width: 430, height: 932, screen: '#19262D', hideScrollbar: true },  /* the app shows a scrollbar when framed; clip it off */
+  phone: {
+    width: 430, height: 932, screen: '#19262D',
+    /* At 600px+ wide and 500px+ tall the app draws its own 430px device (hidden scrollbar),
+       centered with 24px above and below. The popup hands it that window and crops to the device. */
+    appFrame: { width: 600, padY: 24, minHeight: 500 }
+  },
 
   eyebrow: 'Mobile app prototype',
   heading: 'One app for the Fair and the Fairgrounds',
