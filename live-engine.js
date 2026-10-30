@@ -41,14 +41,23 @@
     '#lv-popup button{text-transform:none;letter-spacing:normal;line-height:normal;margin:0;font:inherit;color:inherit}',
     '#lv-popup a{text-decoration:none}',
     '#lv-popup :focus-visible{outline:2px solid var(--lv-accent);outline-offset:2px}',
-    '#lv-popup{--scrim:rgb(0 0 0 / .55);--sheet:#f6f6f4;--ink:#1d1d1b;--muted:#66665f;--line:#e3e3df;--dock:#1d1d1b;--chip:#ebebe7;--ease:cubic-bezier(.2,.8,.2,1);',
+    '#lv-popup{--scrim:rgb(0 0 0 / .55);--sheet:#f6f6f4;--ink:#1d1d1b;--muted:#66665f;--line:#e3e3df;--dock:#1d1d1b;--chip:#ebebe7;--ease:cubic-bezier(.2,.8,.2,1);--ease-open:cubic-bezier(.25,.46,.2,1);--ease-close:cubic-bezier(.5,0,.3,1);',
     '--lv-font:Merriweather,Georgia,"Times New Roman",serif;--lv-ui:Montserrat,system-ui,-apple-system,"Segoe UI",sans-serif;--lv-accent:#1d1d1b;--lv-on-accent:#fff;--lv-stage:#111;--lv-screen:#fff;--lv-stage-ink:rgb(255 255 255 / .75);--lv-bar-h:65px;',
     'position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;justify-content:flex-end;visibility:hidden}',
     '#lv-popup.is-open,#lv-popup.is-closing{visibility:visible}',
-    '#lv-popup .lv-scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;transition:opacity .45s var(--ease)}',
-    '#lv-popup .lv-sheet{position:relative;height:calc(100% - 24px - env(safe-area-inset-top,0px));background:var(--sheet);border-radius:16px 16px 0 0;transform:translateY(102%);transition:transform .6s var(--ease);display:flex;flex-direction:column;overflow:hidden;font-family:var(--lv-font);color:var(--ink)}',
+    '#lv-popup .lv-scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;transition:opacity .5s var(--ease-open)}',
+    '#lv-popup .lv-sheet{position:relative;height:calc(100% - 24px - env(safe-area-inset-top,0px));background:var(--sheet);border-radius:16px 16px 0 0;transform:translateY(102%);transition:transform .7s var(--ease-open);display:flex;flex-direction:column;overflow:hidden;font-family:var(--lv-font);color:var(--ink)}',
     '#lv-popup.is-open .lv-scrim{opacity:1}#lv-popup.is-open .lv-sheet{transform:none}',
-    '@media (prefers-reduced-motion:reduce){#lv-popup .lv-scrim,#lv-popup .lv-sheet{transition:none}}',
+    /* Motion matches the design-system popup: the sheet slides up, then its content fades and rises in. */
+    '#lv-popup.is-closing .lv-scrim{transition:opacity .3s ease-in-out}',
+    '#lv-popup.is-closing .lv-sheet{transition:transform .4s var(--ease-close)}',
+    '#lv-popup .lv-scroll{opacity:0}',
+    '#lv-popup .lv-scroll > *{transform:translateY(16px)}',
+    '#lv-popup.is-closing .lv-scroll{opacity:1}',
+    '#lv-popup.is-closing .lv-scroll > *{transform:none}',
+    '#lv-popup.is-open.is-ready .lv-scroll{opacity:1;transition:opacity .5s ease-out .14s}',
+    '#lv-popup.is-open.is-ready .lv-scroll > *{transform:none;transition:transform .7s var(--ease-open) .1s}',
+    '@media (prefers-reduced-motion:reduce){#lv-popup .lv-scrim,#lv-popup .lv-sheet,#lv-popup .lv-scroll,#lv-popup .lv-scroll > *,#lv-popup.is-open.is-ready .lv-scroll,#lv-popup.is-open.is-ready .lv-scroll > *,#lv-popup.is-closing .lv-scrim,#lv-popup.is-closing .lv-sheet{transition:none}}',
     '#lv-popup .lv-bar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:var(--lv-bar-h);padding-block:10px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line)}',
     '#lv-popup .lv-bar h2{font:700 17px/24px var(--lv-font);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '#lv-popup .lv-x{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;border:0;background:var(--dock);color:#fff;cursor:pointer;flex:none}',
@@ -329,24 +338,42 @@
     q('.lv-canvas').classList.toggle('is-fixed', !!fixed);
     current = key;
     intentAt = Date.now(); q('.lv-scroll').scrollTop = 0;
-    mountFrame(C.url, C.name);
+    /* Load the live site once the sheet has finished sliding in, so heavy pages (3D, video) don't
+       make the slide stutter. The loading cover shows in the meantime. */
+    clearTimeout(show.t);
+    q('.lv-frame').innerHTML = ''; q('.lv-canvas').classList.remove('is-loaded'); layout();
+    var wait = root.classList.contains('is-open') && !root.classList.contains('is-opening') ? 0 : 720;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) wait = 0;
+    show.t = setTimeout(function () { if (current === key) mountFrame(C.url, C.name); }, wait);
   }
 
   function open(id, inline) {
     ensureRoot();
     clearTimeout(closeT);
-    if (!root.classList.contains('is-open')) lastFocus = document.activeElement;
+    var wasOpen = root.classList.contains('is-open');
+    if (!wasOpen) lastFocus = document.activeElement;
     root.classList.remove('is-closing'); root.setAttribute('aria-hidden', 'false');
-    document.documentElement.style.overflow = 'hidden';
-    requestAnimationFrame(function () { root.classList.add('is-open'); q('.lv-x').focus({ preventScroll: true }); });
-    if (inline) { show(inline, 'inline:' + inline.url); return; }
+    void root.offsetHeight; /* commit the off-screen start state so the first open has something to animate from */
+    document.documentElement.style.overflow = 'hidden'; document.documentElement.style.scrollbarGutter = 'stable';
+    /* Start the slide once the project is ready (or after 350ms on a slow connection), like the design-system popup. */
+    var started = wasOpen;
+    function start() {
+      if (started) return; started = true;
+      root.classList.add('is-opening');
+      requestAnimationFrame(function () { root.classList.add('is-open'); q('.lv-x').focus({ preventScroll: true }); });
+      setTimeout(function () { root.classList.remove('is-opening'); }, 720);
+    }
+    function ready() { root.classList.add('is-ready'); start(); }
+    if (inline) { show(inline, 'inline:' + inline.url); ready(); return; }
+    if (registry[id]) { show(registry[id], id); ready(); return; }
+    setTimeout(start, 350);
     q('#lv-popup-title').textContent = 'Loading…';
-    load(id).then(function (C) { show(C, id); }).catch(function (err) {
+    load(id).then(function (C) { show(C, id); ready(); }).catch(function (err) {
       q('#lv-popup-title').textContent = 'Preview unavailable';
       q('.lv-frame').innerHTML = '<p class="lv-error">This preview could not be loaded. Check your connection and try again.</p>';
       fixed = null; phone = null; q('.lv-canvas').classList.remove('is-fixed'); layout();
       q('.lv-canvas').classList.add('is-loaded');
-      current = null;
+      current = null; ready();
       if (window.console) console.warn('[LivePopup]', err.message);
     });
   }
@@ -355,11 +382,12 @@
     if (e && e.preventDefault) e.preventDefault();
     if (!root || !root.classList.contains('is-open')) return;
     if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
-    root.classList.remove('is-open'); root.classList.add('is-closing'); root.setAttribute('aria-hidden', 'true');
+    clearTimeout(show.t);
+    root.classList.remove('is-open', 'is-ready', 'is-opening'); root.classList.add('is-closing'); root.setAttribute('aria-hidden', 'true');
     closeT = setTimeout(function () {
-      root.classList.remove('is-closing'); document.documentElement.style.overflow = '';
+      root.classList.remove('is-closing'); document.documentElement.style.overflow = ''; document.documentElement.style.scrollbarGutter = '';
       q('.lv-frame').innerHTML = ''; current = null; fixed = null; phone = null; q('.lv-scroll').classList.remove('is-short'); q('.lv-canvas').classList.remove('is-fixed'); layout(); /* unload the site so 3D, audio and video stop */
-    }, 600);
+    }, 450);
     if (history.replaceState && /#live-/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
     if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
   }
@@ -393,6 +421,16 @@
       else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); }
     }
   });
+
+  /* Warm up: fetch the project file on hover, focus or touch so the first open can start right away. */
+  function warm(e) {
+    if (!e.target.closest) return;
+    var t = e.target.closest('[data-live-open], a[href*="#live-"]');
+    if (!t || (root && root.contains(t))) return;
+    var id = t.getAttribute('data-live-open') || idFromHref(t.getAttribute('href'));
+    if (id) load(id).catch(function () {});
+  }
+  ['pointerover', 'focusin', 'touchstart'].forEach(function (n) { document.addEventListener(n, warm, { passive: true, capture: true }); });
 
   function fromHash() { var id = idFromHref(location.hash); if (id) open(id); }
   window.addEventListener('hashchange', fromHash);
