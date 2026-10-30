@@ -12,6 +12,7 @@ projects/momochan.js   Momochan sliced cat (3D sound piece)
 projects/paramount.js  Paramount VX landing page
 projects/santamonica.js  City of Santa Monica Big Blue Bus mobile prototype (phone frame)
 projects/nysf.js       New York State Fair app (phone frame)
+projects/fairmatch.js  NYS Fair Match game (fixed 1366×1024 stage, never above 100%)
 index.html         test page listing every project
 ```
 
@@ -69,4 +70,4 @@ Some pages are built at one size (for example a 1920×1080 stage) and scale them
 fixed: { width: 1920, height: 1080, pad: function (w) { return 0; } }
 ```
 
-`pad` is the margin the page leaves at a given window width. Copy the page's own rule so the popup can crop it exactly. See `projects/startrek.js`.
+`pad` is the margin the page leaves at a given window width. If the top/bottom margin differs from the sides, add `padY` (a number or a function of width). If the page never grows past its native size, add `maxScale: 1` and the popup caps the stage there. See `projects/fairmatch.js`. Copy the page's own rule so the popup can crop it exactly. See `projects/startrek.js`.

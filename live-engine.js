@@ -228,11 +228,14 @@
     var W = fixed.width, H = fixed.height, padFn = fixed.pad || function () { return 0; };
     var cw = canvas.clientWidth, ch = canvas.clientHeight;
     if (!cw || !ch) return;
-    var dw = Math.max(1, Math.floor(Math.min(cw, ch * W / H)));   /* visible width, whole pixels */
+    /* maxScale: pages that never grow past their native size (e.g. 1) */
+    var dw = Math.max(1, Math.floor(Math.min(cw, ch * W / H, fixed.maxScale ? W * fixed.maxScale : Infinity)));   /* visible width, whole pixels */
     var s = dw / W, dh = H * s;
     var p = padFn(dw), iw = dw + 2 * p;
     for (var i = 0; i < 6; i++) { var np = padFn(iw); if (np === p) break; p = np; iw = dw + 2 * p; }
-    var ih = Math.ceil(dh) + 2 * p + 2;                            /* a little extra height so width sets the scale */
+    /* padY: a page whose top/bottom margin differs from its side margin (number or function of width) */
+    var py = fixed.padY == null ? p : (typeof fixed.padY === 'function' ? fixed.padY(iw) : fixed.padY);
+    var ih = Math.ceil(dh) + 2 * py + 2;                           /* a little extra height so width sets the scale */
     frame.style.width = dw + 'px'; frame.style.height = dh + 'px';
     load.style.width = dw + 'px'; load.style.height = dh + 'px';
     load.style.left = (cw - dw) / 2 + 'px'; load.style.top = (ch - dh) / 2 + 'px';
