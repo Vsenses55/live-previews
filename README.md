@@ -13,6 +13,7 @@ projects/paramount.js  Paramount VX landing page
 projects/santamonica.js  City of Santa Monica Big Blue Bus mobile prototype (phone frame)
 projects/nysf.js       New York State Fair app (phone frame)
 projects/fairmatch.js  NYS Fair Match game (fixed 1366×1024 stage, never above 100%)
+projects/fountaincourt.js  Fountain Court interactive splash pad (3D)
 index.html         test page listing every project
 ```
 
