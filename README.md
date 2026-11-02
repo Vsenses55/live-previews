@@ -16,6 +16,7 @@ projects/fairmatch.js  NYS Fair Match game (fixed 1366×1024 stage, never above 
 projects/fountaincourt.js  Fountain Court interactive splash pad (3D)
 projects/momochanparticles.js  Momochan cat particle study
 projects/sherri.js     Sherri Show responsive website
+projects/lfb.js        Lead From Behind responsive website
 index.html         test page listing every project
 ```
 
